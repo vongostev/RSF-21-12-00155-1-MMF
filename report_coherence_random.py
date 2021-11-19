@@ -150,7 +150,7 @@ class LightFiberAnalyser:
                 self.wl, self.core_radius, self.NA, pola=1) * (
                     self.simc__kwargs['dims'] * self.simc__kwargs['layers'])
         elif self.index_type == 'PCF':
-            self.Nmodes_estim = 1000
+            self.Nmodes_estim = 1
             profile.initPhotonicCrystalHex(
                 n1=self.n1, a=self.core_radius, NA=self.NA, **self.pcf__kwargs)
         return profile
@@ -325,17 +325,17 @@ fiber_params = [
     #     n1=1.4613,
     #     mod_radius=25
     # ),
-    dict(
-        area_size = 4 * 3,  # um
-        # to SIMC IXF-MC-12-PAS-6
-        index_type='SI',
-        fiber_type='smf_simc',
-        core_radius=3,
-        NA=0.19,
-        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-        n1=1.4613,
-        mod_radius=3
-    ),
+    # dict(
+    #     area_size = 4 * 3,  # um
+    #     # to SIMC IXF-MC-12-PAS-6
+    #     index_type='SI',
+    #     fiber_type='smf_simc',
+    #     core_radius=3,
+    #     NA=0.19,
+    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+    #     n1=1.4613,
+    #     mod_radius=3
+    # ),
     # dict(
     #     area_size = 6 * 1.5,  # um
     #     # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
@@ -364,19 +364,23 @@ fiber_params = [
     #     ),
     #     mod_radius=42
     # ),
-    # dict(
-    #     # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
-    #     index_type='PCF',
-    #     core_radius=1.15,
-    #     NA=0.2,
-    #     n1=1.45704,
-    #     pcf__kwargs=dict(
-    #         central_core_radius=3.5,
-    #         core_pitch=0.0,
-    #         pcf_radius=24,
-    #         cladding_radius=65
-    #     )
-    # )
+    dict(
+        # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
+        area_size=150,
+        npoints = 1024,
+        index_type='PCF',
+        core_radius=1.9,
+        NA=0.2,
+        n1=1.4613,
+        pcf__kwargs=dict(
+            central_core_radius=5,
+            central_core_n1=1,
+            core_pitch=0.,
+            pcf_radius=35.3,
+            cladding_radius=60
+        ),
+        mod_radius=60
+    )
 ]
 
 fiber_data = {}
@@ -387,25 +391,25 @@ mod_params = {
         'init_args': (),
         'mod_gen': random_round_hole_bin
     },
-    'ampl': {
-        'init_gen': plane_wave,
-        'init_args': (),
-        'mod_gen': random_round_hole
-    },
-    'slm': {
-        'init_gen': plane_wave,
-        'init_args': (),
-        'mod_gen': random_round_hole_phase
-    },
-    'dmdslm': {
-        'init_gen': random_wave_bin,
-        'init_args': (),
-        'mod_gen': random_round_hole_phase
-    },
+    # 'ampl': {
+    #     'init_gen': plane_wave,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole
+    # },
+    # 'slm': {
+    #     'init_gen': plane_wave,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole_phase
+    # },
+    # 'dmdslm': {
+    #     'init_gen': random_wave_bin,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole_phase
+    # },
 }
 
-date = '191121'
-data_dir = 'simc'
+date = '201121'
+data_dir = 'pcf'
 using_gpu = True
 if not using_gpu:
     cp = np

@@ -5,9 +5,7 @@ Created on Sat Nov 13 11:33:40 2021
 @author: von.gostev
 """
 import __init__
-from lightprop2d import Beam2D, random_round_hole
-from gi import ImgEmulator
-from pyMMF import IndexProfile, propagationModeSolver, estimateNumModesSI
+from pyMMF import IndexProfile
 import matplotlib.pyplot as plt
 
 area_size = 3.5 * 31.25
