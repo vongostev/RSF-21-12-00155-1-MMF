@@ -63,21 +63,7 @@ log.addHandler(handler)
     входе в волокно
     - Корреляционная функция при фиксированной длине волокна
     - Зависимость ширины корреляционной функции от длины волокна
-    
-Архитектура кода:
-    Класс LightFiberAnalyser
-    Методы:
-        set_modulation_func
-        fiber_calc
-        single_calc
-        get_init_iprofile
-        get_input_iprofile
-        get_output_iprofile
-        get_modes_coeffs
-        correlate_init
-        correlate_input
-        correlate_output(fiber_len=0)
-        correlate_by_fiber_len
+
 """
 
 
@@ -319,27 +305,37 @@ distances = [0, 100 * um, 1000 * um, 1]
 n_cf = 1000
 
 fiber_params = [
+    # dict(
+    #     area_size=3.5 * 31.25,  # um
+    #     # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
+    #     index_type='GRIN',
+    #     core_radius=31.25,
+    #     NA=0.275,
+    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+    #     n1=1.4613,
+    #     mod_radius=31.25
+    # ),
+    # dict(
+    #     area_size=3.5 * 31.25,  # um
+    #     # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
+    #     index_type='SI',
+    #     core_radius=25,
+    #     NA=0.22,
+    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+    #     n1=1.4613,
+    #     mod_radius=25
+    # ),
     dict(
-        area_size=3.5 * 31.25,  # um
-        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
-        index_type='GRIN',
-        core_radius=31.25,
-        NA=0.275,
-        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-        n1=1.4613,
-        mod_radius=31.25
-    ),
-    dict(
-        area_size=3.5 * 31.25,  # um
-        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
+        area_size = 4 * 3,  # um
+        # to SIMC IXF-MC-12-PAS-6
         index_type='SI',
-        core_radius=25,
-        NA=0.22,
+        fiber_type='smf_simc',
+        core_radius=3,
+        NA=0.19,
         # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
         n1=1.4613,
-        mod_radius=25
+        mod_radius=3
     ),
-
     # dict(
     #     area_size = 6 * 1.5,  # um
     #     # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
@@ -348,7 +344,7 @@ fiber_params = [
     #     core_radius=1.5,
     #     NA=0.12,
     #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-    #     n1=1.4613
+    #     n1=1.4613,
     #     mod_radius=1.5
     # ),
     # dict(
@@ -409,9 +405,15 @@ mod_params = {
 }
 
 date = '191121'
+data_dir = 'simc'
 using_gpu = True
 if not using_gpu:
     cp = np
+else:
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+    mempool.free_all_blocks()
+    pinned_mempool.free_all_blocks()
 
 for mod in mod_params:
     for params in fiber_params:
@@ -419,7 +421,7 @@ for mod in mod_params:
         log.info(f"Analysing {itype} fiber")
         fiber_data[itype] = {'params': params}
         mod_radius = params['mod_radius']
-        #del params['mod_radius']
+
         analyser = LightFiberAnalyser(
             use_gpu=using_gpu,
             init_field_gen=mod_params[mod]['init_gen'],
@@ -451,6 +453,10 @@ for mod in mod_params:
             # Пример профиля после волокна на расстоянии d см
             fiber_data[itype][f'o__ip_{d}'] = analyser.iprofile
 
-    fname = f'50_62.5/cohdata_{date}_mmf_{mod}.npz'
+    fname = f'{data_dir}/cohdata_{date}_{analyser.fiber_type}_{mod}.npz'
     np.savez_compressed(fname, **fiber_data)
     log.info(f'Data saved to `{fname}`')
+
+    if using_gpu:
+        mempool.free_all_blocks()
+        pinned_mempool.free_all_blocks()
