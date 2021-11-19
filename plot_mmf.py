@@ -13,15 +13,15 @@ def _n(x):
     return x / np.max(x)
 
 
-area_size = 3.5 * 25
+area_size = 3.5 * 31.25
 bounds = [-area_size / 2, area_size / 2]
 xlabel = 'Поперечная координата, мкм'
 npoints = 2 ** 8
 np_half = 2 ** 7
-fiber_type = 'GRIN'
-mod_type = 'amplphase'
+fiber_type = 'SI'
+mod_type = 'dmd'
 
-_loaded_data = np.load('coherence_data_191121_mmf_amplphase.npz', allow_pickle=True)
+_loaded_data = np.load('50_62.5/cohdata_191121_mmf_dmd.npz', allow_pickle=True)
 loaded_data = _loaded_data[fiber_type].tolist()
 
 plt.plot(np.linspace(*bounds, 2 ** 8), loaded_data['index'][2**7])

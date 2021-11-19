@@ -8,7 +8,8 @@ import __init__
 
 from logging import Logger, StreamHandler, Formatter
 from joblib import Parallel, delayed
-from pyMMF import IndexProfile, propagationModeSolver, estimateNumModesGRIN, estimateNumModesSI
+from pyMMF import (IndexProfile, propagationModeSolver,
+                   estimateNumModesGRIN, estimateNumModesSI)
 from lightprop2d import (
     Beam2D, random_round_hole_phase, random_round_hole, um,
     plane_wave, random_wave_bin, random_round_hole_bin)
@@ -129,6 +130,9 @@ class LightFiberAnalyser:
     fiber_len: float = 0
 
     use_gpu: bool = True
+    nimg: int = 1000
+
+    mod_radius: float = 0
 
     def __post_init__(self):
 
@@ -154,8 +158,11 @@ class LightFiberAnalyser:
             self.Nmodes_estim = estimateNumModesSI(
                 self.wl, self.core_radius, self.NA, pola=1)
         elif self.index_type == 'SIMC':
-            profile.initStepIndexMultiCore(
+            profile.initStepIndexMultiCoreRadial(
                 n1=self.n1, a=self.core_radius, NA=self.NA, **self.simc__kwargs)
+            self.Nmodes_estim = estimateNumModesSI(
+                self.wl, self.core_radius, self.NA, pola=1) * (
+                    self.simc__kwargs['dims'] * self.simc__kwargs['layers'])
         elif self.index_type == 'PCF':
             self.Nmodes_estim = 1000
             profile.initPhotonicCrystalHex(
@@ -195,6 +202,8 @@ class LightFiberAnalyser:
         self.modes_matrix_dot_t = modes_matrix.T.dot(modes_matrix)
         log.info(f'Found {len(self.modes)} modes')
         log.info(f"Fiber initialized. Elapsed time {perf_counter() - t:.3f} s")
+        self.modes_coeffs = np.zeros((self.nimg, len(self.modes)),
+                                     dtype=np.complex128)
 
     def init_beam(self):
         self.beam = Beam2D(self.area_size, self.npoints, self.wl,
@@ -220,30 +229,16 @@ class LightFiberAnalyser:
     def get_input_iprofile(self):
         return self.get_output_iprofile(0)
 
-    def get_output_iprofile(self, fiber_len=0):
-        modes_coeffs = self.beam.fast_deconstruct_by_modes(
-            self.modes_matrix_t, self.modes_matrix_dot_t)
+    def get_output_iprofile(self, fiber_len=0, mc=None):
+        if mc is None:
+            mc = self.beam.fast_deconstruct_by_modes(
+                self.modes_matrix_t, self.modes_matrix_dot_t)
         if fiber_len > 0:
-            mc = self.tm @ modes_coeffs
-        else:
-            mc = modes_coeffs
+            mc = self.tm @ self.beam._asxp(mc)
         self.beam.construct_by_modes(self.modes, mc)
         return self.iprofile
 
-    @property
-    def modes_coeffs(self):
-        return self.tm @ self.modes_coeffs
-
-    # def _get_cf(self, point_data, idata):
-    #     t = perf_counter()
-    #     self.cf = np.tensordot(point_data - point_data.mean(),
-    #                            idata - idata.mean(axis=0),
-    #                            axes=1)
-    #     self.cf /= np.max(self.cf)
-    #     log.info(
-    #         f"Correlation function calculated. Elapsed time {perf_counter() - t:.3f} s")
-
-    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=True):
+    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=False):
         t = perf_counter()
         if fast:
             log.info(
@@ -266,7 +261,7 @@ class LightFiberAnalyser:
         log.info(
             f"Correlation function calculated. Elapsed time {perf_counter() - t:.3f} s")
 
-    def correlate_init(self, nimg=1000):
+    def correlate_init(self, nimg=0):
         t = perf_counter()
         idata = np.zeros((nimg, self.npoints, self.npoints))
         for i in range(nimg):
@@ -279,23 +274,33 @@ class LightFiberAnalyser:
 
         return self.cf
 
-    def correlate_input(self, nimg=1000):
-        return self.correlate_output(nimg, 0, 0)
-
-    def correlate_output(self, nimg=1000, fiber_len=0, prop_distance=0):
+    def correlate_input(self, nimg=0):
+        nimg = self.nimg if nimg == 0 else nimg
         t = perf_counter()
         idata = np.zeros((nimg, self.npoints, self.npoints))
         for i in range(nimg):
             self.init_beam()
-            _iprofile = self.get_output_iprofile(fiber_len)
+            _iprofile = self.get_output_iprofile(0)
+            idata[i, :, :] = _iprofile
+            self.modes_coeffs[i, :] = self.beam._np(self.beam.modes_coeffs)
+        point_data = idata[:, self.npoints // 2, self.npoints // 2]
+        log.info(
+            f"In-fiber data to cf generated. Elapsed time {perf_counter() - t:.3f} s")
+        self._get_cf(point_data, idata)
+        return self.cf
+
+    def correlate_output(self, nimg=0, fiber_len=0, prop_distance=0):
+        nimg = self.nimg if nimg == 0 else nimg
+        t = perf_counter()
+        idata = np.zeros((nimg, self.npoints, self.npoints))
+        for i in range(nimg):
+            _iprofile = self.get_output_iprofile(
+                fiber_len, self.modes_coeffs[i])
             if prop_distance > 0:
                 self.propagate(prop_distance)
                 idata[i, :, :] = self.iprofile
             else:
                 idata[i, :, :] = _iprofile
-        # idata = np.array(
-        #     Parallel(n_jobs=2)(delayed(fiber_data_gen)(self, fiber_len, prop_distance)
-        #                         for i in range(nimg)))
 
         point_data = idata[:, self.npoints // 2, self.npoints // 2]
         log.info(
@@ -303,18 +308,27 @@ class LightFiberAnalyser:
         self._get_cf(point_data, idata)
         return self.cf
 
-    def correlate_by_fiber_len(self, nimg=1000, max_fiber_len=1 / um):
+    def correlate_by_fiber_len(self, nimg=0, max_fiber_len=1 / um):
         for l in np.linspace(0, max_fiber_len, 10):
             self.correlate_output(nimg, l, 0)
 
 
-area_size = 3.5 * 25  # um
-cladding_radius = 25  # um
+# um
 fiber_len = 10 / um  # um for cm
 distances = [0, 100 * um, 1000 * um, 1]
-n_cf = 10
+n_cf = 1000
 
 fiber_params = [
+    dict(
+        area_size=3.5 * 31.25,  # um
+        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
+        index_type='GRIN',
+        core_radius=31.25,
+        NA=0.275,
+        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+        n1=1.4613,
+        mod_radius=31.25
+    ),
     dict(
         area_size=3.5 * 31.25,  # um
         # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
@@ -322,37 +336,37 @@ fiber_params = [
         core_radius=25,
         NA=0.22,
         # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-        n1=1.4613
+        n1=1.4613,
+        mod_radius=25
     ),
-    dict(
-        area_size=3.5 * 31.25,  # um
-        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
-        index_type='GRIN',
-        core_radius=62.5,
-        NA=0.275,
-        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-        n1=1.4613
-    ),
+
     # dict(
     #     area_size = 6 * 1.5,  # um
     #     # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
     #     index_type='SI',
     #     fiber_type='smf',
-    #     core_radius=3 / 2,
+    #     core_radius=1.5,
     #     NA=0.12,
     #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
     #     n1=1.4613
+    #     mod_radius=1.5
     # ),
     # dict(
+    #     area_size=3.5 * 31.25,
+    #     npoints=256,
+    #     # https://photonics.ixblue.com/sites/default/files/2021-06/IXF-MC-12-PAS-6_edA_multicore_fiber.pdf
     #     index_type='SIMC',
     #     core_radius=3,
-    #     core_pitch=6,
-    #     delta=0.039,
-    #     NA=0.2,
-    #     n1=1.45,
-    #     dims=6,
-    #     layers=2,
-    #     central_core=True
+    #     NA=0.19,
+    #     n1=1.4613,
+    #     simc__kwargs=dict(
+    #         core_pitch=35,
+    #         delta=0.039,
+    #         dims=12,
+    #         layers=1,
+    #         central_core_radius=0
+    #     ),
+    #     mod_radius=42
     # ),
     # dict(
     #     # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
@@ -393,6 +407,7 @@ mod_params = {
         'mod_gen': random_round_hole_phase
     },
 }
+
 date = '191121'
 using_gpu = True
 if not using_gpu:
@@ -403,13 +418,15 @@ for mod in mod_params:
         itype = params['index_type']
         log.info(f"Analysing {itype} fiber")
         fiber_data[itype] = {'params': params}
+        mod_radius = params['mod_radius']
+        #del params['mod_radius']
         analyser = LightFiberAnalyser(
             use_gpu=using_gpu,
             init_field_gen=mod_params[mod]['init_gen'],
             init_gen_args=mod_params[mod]['init_args'],
             **params)
         analyser.set_modulation_func(mod_params[mod]['mod_gen'],
-                                     cladding_radius, binning_order=1)
+                                     mod_radius, binning_order=1)
         analyser.init_beam()
         # Пример исходного профиля
         fiber_data[itype]['s__ip'] = analyser.iprofile
@@ -434,4 +451,6 @@ for mod in mod_params:
             # Пример профиля после волокна на расстоянии d см
             fiber_data[itype][f'o__ip_{d}'] = analyser.iprofile
 
-    np.savez_compressed(f'50_62.5/cohdata_{date}_mmf_{mod}.npz', **fiber_data)
+    fname = f'50_62.5/cohdata_{date}_mmf_{mod}.npz'
+    np.savez_compressed(fname, **fiber_data)
+    log.info(f'Data saved to `{fname}`')

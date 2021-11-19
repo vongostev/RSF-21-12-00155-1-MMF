@@ -10,8 +10,7 @@ from gi import ImgEmulator
 from pyMMF import IndexProfile, propagationModeSolver, estimateNumModesSI
 import matplotlib.pyplot as plt
 
-profile = IndexProfile(npoints=512, areaSize=3.5 * 25)
-profile.initPhotonicCrystalHex(central_core_radius=7 / 2, a=2.3 / 2, core_pitch=0.,
-                               pcf_radius=24,  cladding_radius=65)
+profile = IndexProfile(npoints=256, areaSize=3.5 * 31.25)
+profile.initStepIndexMultiCoreRadial(central_core_radius=0, a=6 / 2, core_pitch=35., dims=12)
 
 plt.imshow(profile.n)
