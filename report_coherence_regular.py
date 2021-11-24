@@ -7,7 +7,7 @@ Created on Sat Nov 20 21:48:17 2021
 import __init__
 import numpy as np
 import matplotlib.pyplot as plt
-from lightprop2d import Beam2D, um, plane_wave, round_hole, gaussian_beam
+from lightprop2d import Beam2D, um, plane_wave, round_hole, gaussian_beam, random_round_hole_phase
 from scipy.linalg import expm
 
 
@@ -23,8 +23,8 @@ loaded_data = np.load('mmf_GRIN_62.5_properties.npz')
 modes = loaded_data['modes_list']
 OP = loaded_data['fiber_op']
 ibeam = Beam2D(area_size=area_size * um, npoints=npoints, wl=wl * um, unsafe_fft=1,
-               init_field_gen=gaussian_beam,
-               init_gen_args=(1, cradius * um / 2,),
+               init_field_gen=random_round_hole_phase,
+               init_gen_args=(cradius * um,),
                use_gpu=0)
 # init_field_gen=round_hole, init_gen_args=(cradius,))
 profiles = [ibeam.iprofile]
@@ -58,7 +58,7 @@ for ax, p in zip(axes, profiles):
     ax.set_xlabel(f'({lbl[i]})')
     i += 1
 plt.tight_layout()
-plt.savefig('mmf/mmf_grin_gaussian_ip.png', dpi=200)
+# plt.savefig('mmf/mmf_grin_gaussian_ip.png', dpi=200)
 plt.show()
 
 loaded_data.close()

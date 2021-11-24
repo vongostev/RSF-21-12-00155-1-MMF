@@ -129,6 +129,7 @@ class LightFiberAnalyser:
 
         self.fiber_props = \
             f"{self.fiber_type}_{self.index_type}_{self.core_radius * 2:g}_properties.npz"
+        self.__o__fields = {}
 
     def __set_index_profile(self):
         profile = IndexProfile(npoints=self.npoints,
@@ -191,11 +192,17 @@ class LightFiberAnalyser:
         self.modes_coeffs = np.zeros((self.nimg, len(self.modes)),
                                      dtype=np.complex128)
 
-    def init_beam(self):
-        self.beam = Beam2D(self.area_size, self.npoints, self.wl,
-                           init_field_gen=self.init_field_gen,
-                           init_gen_args=self.init_gen_args,
-                           unsafe_fft=1, use_gpu=self.use_gpu)
+    def init_beam(self, field=None):
+        if field is None:
+            self.beam = Beam2D(self.area_size, self.npoints, self.wl,
+                               init_field_gen=self.init_field_gen,
+                               init_gen_args=self.init_gen_args,
+                               unsafe_fft=1, use_gpu=self.use_gpu)
+        else:
+            self.beam = Beam2D(self.area_size, self.npoints, self.wl,
+                               init_field=field,
+                               unsafe_fft=1,
+                               use_gpu=self.use_gpu)
         self.mask = self._mf(self.beam.X, self.beam.Y)
         self.beam.coordinate_filter(f_init=self.mask)
 
@@ -275,19 +282,43 @@ class LightFiberAnalyser:
         self._get_cf(point_data, idata)
         return self.cf
 
-    def correlate_output(self, nimg=0, fiber_len=0, prop_distance=0):
+    def correlate_output(self, nimg=0, fiber_len=0, prop_distance=0, expand=1):
         nimg = self.nimg if nimg == 0 else nimg
         t = perf_counter()
         idata = np.zeros((nimg, self.npoints, self.npoints))
+        self.__o__fields[prop_distance] = []
+        pre_full = 0
+        if len(self.__o__fields) > 0:
+            pre_dist = list(self.__o__fields.keys())[-1]
+            pre_full = (
+                len(self.__o__fields[pre_dist]) == nimg)
+        if pre_full:
+            pre_data = self.__o__fields[pre_dist]
+            print(prop_distance, pre_dist)
         for i in range(nimg):
-            _iprofile = self.get_output_iprofile(
-                fiber_len, self.modes_coeffs[i])
+            if pre_full:
+                _iprofile = self.init_beam(
+                    pre_data[i])
+                log.debug('Read profile')
+            else:
+                if expand > 1:
+                    self.init_beam()
+                _iprofile = self.get_output_iprofile(
+                    fiber_len, self.modes_coeffs[i])
             if prop_distance > 0:
-                self.propagate(prop_distance)
+                if expand > 1:
+                    self.beam.expand(self.area_size * expand)
+                    # log.debug(self.beam)
+                    self.beam.coarse(expand)
+                self.propagate(
+                    (prop_distance - float(pre_dist)) / um)
+                # log.debug(self.beam)
                 idata[i, :, :] = self.beam.iprofile
             else:
                 idata[i, :, :] = _iprofile
-
+            self.__o__fields[prop_distance].append(self.beam.field)
+        self.__o__fields[pre_dist] = None
+        self.area_size = self.area_size * expand
         point_data = idata[:, self.npoints // 2, self.npoints // 2]
         log.info(
             f"In-fiber data to cf generated. Elapsed time {perf_counter() - t:.3f} s")
@@ -301,11 +332,6 @@ class LightFiberAnalyser:
             data.append(self.correlate_output(nimg, l, 0))
         return data
 
-
-# um
-fiber_len = 10 / um  # um for cm
-distances = [0]#, 100 * um, 1000 * um, 1]
-n_cf = 1000
 
 fiber_params = [
     dict(
@@ -392,33 +418,39 @@ fiber_params = [
 fiber_data = {}
 
 mod_params = {
-    'dmd': {
-        'init_gen': plane_wave,
-        'init_args': (),
-        'mod_gen': random_round_hole_bin
-    },
-    'ampl': {
-        'init_gen': plane_wave,
-        'init_args': (),
-        'mod_gen': random_round_hole
-    },
+    # 'dmd': {
+    #     'init_gen': plane_wave,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole_bin
+    # },
+    # 'ampl': {
+    #     'init_gen': plane_wave,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole
+    # },
     'slm': {
         'init_gen': plane_wave,
         'init_args': (),
         'mod_gen': random_round_hole_phase
     },
-    'dmdslm': {
-        'init_gen': random_wave_bin,
-        'init_args': (),
-        'mod_gen': random_round_hole_phase
-    },
+    # 'dmdslm': {
+    #     'init_gen': random_wave_bin,
+    #     'init_args': (),
+    #     'mod_gen': random_round_hole_phase
+    # },
 }
 
+# um
+fiber_len = 10 / um  # um for cm
+distances = (
+    np.array([0, 20, 40, 60, 80, 100, 150, 200, 1000, 3000, 10000]) * um)
+expands = ([1] * 6 + [2] + [1] * 1 + [2] + [1] + [2])
+n_cf = 1000
 date = '241121'
 data_dir = 'mmf'
 max_flen = 23 / um
 using_gpu = False
-PREFIX = 'cohdata'
+PREFIX = 'cohdata_dist'
 
 if not using_gpu:
     cp = np
@@ -439,6 +471,7 @@ for mod in mod_params:
             use_gpu=using_gpu,
             init_field_gen=mod_params[mod]['init_gen'],
             init_gen_args=mod_params[mod]['init_args'],
+            nimg=n_cf,
             **params)
         analyser.set_modulation_func(mod_params[mod]['mod_gen'],
                                      mod_radius, binning_order=1)
@@ -458,11 +491,11 @@ for mod in mod_params:
 
         analyser.set_transmission_matrix(fiber_len)
         log.info(f'Set fiber length to {fiber_len * um} cm')
-        for d in distances:
+        for expf, d in zip(expands, distances):
             log.info(f"Set propagation distance to {d:g} cm")
             # Корреляционная функция после волокна на расстоянии d см
             fiber_data[itype][f'o__cf_{d}'] = analyser.correlate_output(
-                n_cf, fiber_len, d)
+                n_cf, fiber_len, d, expf)
             # Пример профиля после волокна на расстоянии d см
             fiber_data[itype][f'o__ip_{d}'] = analyser.iprofile
         # fiber_data[itype]['params']['max_flen'] = max_flen
