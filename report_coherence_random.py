@@ -150,7 +150,7 @@ class LightFiberAnalyser:
                 self.wl, self.core_radius, self.NA, pola=1) * (
                     self.simc__kwargs['dims'] * self.simc__kwargs['layers'])
         elif self.index_type == 'PCF':
-            self.Nmodes_estim = 1
+            self.Nmodes_estim = 990
             profile.initPhotonicCrystalHex(
                 n1=self.n1, a=self.core_radius, NA=self.NA, **self.pcf__kwargs)
         return profile
@@ -171,7 +171,7 @@ class LightFiberAnalyser:
                 modes = self.solver.solve(mode='SI', n_jobs=-2)
             else:
                 modes = self.solver.solve(
-                    nmodesMax=self.Nmodes_estim+10, boundary='close',
+                    nmodesMax=self.Nmodes_estim+100, boundary='close',
                     mode='eig', curvature=None, propag_only=True)
             self.modes = cp.array(modes.profiles)[
                 np.argsort(modes.betas)[::-1]]
@@ -284,7 +284,7 @@ class LightFiberAnalyser:
                 fiber_len, self.modes_coeffs[i])
             if prop_distance > 0:
                 self.propagate(prop_distance)
-                idata[i, :, :] = self.iprofile
+                idata[i, :, :] = self.beam.iprofile
             else:
                 idata[i, :, :] = _iprofile
 
@@ -295,27 +295,32 @@ class LightFiberAnalyser:
         return self.cf
 
     def correlate_by_fiber_len(self, nimg=0, max_fiber_len=1 / um):
-        for l in np.linspace(0, max_fiber_len, 10):
-            self.correlate_output(nimg, l, 0)
+        data = []
+        for l in np.linspace(0, max_fiber_len, 15):
+            self.set_transmission_matrix(l)
+            data.append(self.correlate_output(nimg, l, 0))
+        return data
 
 
 # um
 fiber_len = 10 / um  # um for cm
-distances = [0, 100 * um, 1000 * um, 1]
+distances = [0]#, 100 * um, 1000 * um, 1]
 n_cf = 1000
 
 fiber_params = [
+    dict(
+        npoints=256,
+        area_size=3.5 * 31.25,  # um
+        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
+        index_type='GRIN',
+        core_radius=31.25,
+        NA=0.275,
+        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+        n1=1.4613,
+        mod_radius=31.25
+    ),
     # dict(
-    #     area_size=3.5 * 31.25,  # um
-    #     # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=358
-    #     index_type='GRIN',
-    #     core_radius=31.25,
-    #     NA=0.275,
-    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-    #     n1=1.4613,
-    #     mod_radius=31.25
-    # ),
-    # dict(
+    #     npoints=256,
     #     area_size=3.5 * 31.25,  # um
     #     # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
     #     index_type='SI',
@@ -337,7 +342,8 @@ fiber_params = [
     #     mod_radius=3
     # ),
     # dict(
-    #     area_size = 6 * 1.5,  # um
+    #     npoints = 128,
+    #     area_size = 12 * 1.5,  # um
     #     # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
     #     index_type='SI',
     #     fiber_type='smf',
@@ -364,23 +370,23 @@ fiber_params = [
     #     ),
     #     mod_radius=42
     # ),
-    dict(
-        # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
-        area_size=150,
-        npoints = 1024,
-        index_type='PCF',
-        core_radius=1.9,
-        NA=0.2,
-        n1=1.4613,
-        pcf__kwargs=dict(
-            central_core_radius=5,
-            central_core_n1=1,
-            core_pitch=0.,
-            pcf_radius=35.3,
-            cladding_radius=60
-        ),
-        mod_radius=60
-    )
+    # dict(
+    #     # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
+    #     area_size=150,
+    #     npoints=400,
+    #     index_type='PCF',
+    #     core_radius=1.8,
+    #     NA=0.2,
+    #     n1=1.4613,
+    #     pcf__kwargs=dict(
+    #         central_core_radius=5,
+    #         central_core_n1=1,
+    #         core_pitch=0.2,
+    #         pcf_radius=37,
+    #         cladding_radius=60
+    #     ),
+    #     mod_radius=60
+    # )
 ]
 
 fiber_data = {}
@@ -391,26 +397,29 @@ mod_params = {
         'init_args': (),
         'mod_gen': random_round_hole_bin
     },
-    # 'ampl': {
-    #     'init_gen': plane_wave,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole
-    # },
-    # 'slm': {
-    #     'init_gen': plane_wave,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole_phase
-    # },
-    # 'dmdslm': {
-    #     'init_gen': random_wave_bin,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole_phase
-    # },
+    'ampl': {
+        'init_gen': plane_wave,
+        'init_args': (),
+        'mod_gen': random_round_hole
+    },
+    'slm': {
+        'init_gen': plane_wave,
+        'init_args': (),
+        'mod_gen': random_round_hole_phase
+    },
+    'dmdslm': {
+        'init_gen': random_wave_bin,
+        'init_args': (),
+        'mod_gen': random_round_hole_phase
+    },
 }
 
-date = '201121'
-data_dir = 'pcf'
-using_gpu = True
+date = '241121'
+data_dir = 'mmf'
+max_flen = 23 / um
+using_gpu = False
+PREFIX = 'cohdata'
+
 if not using_gpu:
     cp = np
 else:
@@ -456,8 +465,11 @@ for mod in mod_params:
                 n_cf, fiber_len, d)
             # Пример профиля после волокна на расстоянии d см
             fiber_data[itype][f'o__ip_{d}'] = analyser.iprofile
+        # fiber_data[itype]['params']['max_flen'] = max_flen
+        # fiber_data[itype]['fl__cf'] = analyser.correlate_by_fiber_len(
+        #     n_cf, max_fiber_len=max_flen)
 
-    fname = f'{data_dir}/cohdata_{date}_{analyser.fiber_type}_{mod}.npz'
+    fname = f'{data_dir}/{PREFIX}_{date}_{analyser.fiber_type}_{mod}.npz'
     np.savez_compressed(fname, **fiber_data)
     log.info(f'Data saved to `{fname}`')
 

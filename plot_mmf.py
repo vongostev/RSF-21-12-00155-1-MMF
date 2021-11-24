@@ -17,24 +17,28 @@ def _c(y, X, r=25):
     return y
 
 
-area_size = 3.5 * 31.25
-bounds = [-area_size / 2, area_size / 2]
+
 xlabel = 'Поперечная координата, мкм'
 npoints = 2 ** 8
 np_half = 2 ** 7
 index_type = 'GRIN'
 mod_type = 'dmdslm'
 fiber_type = 'mmf'
+data_dir = 'mmf'
 _loaded_data = np.load(
-    f'50_62.5/cohdata_191121_mmf_{mod_type}.npz', allow_pickle=True)
+    f'{data_dir}/cohdata_241121_{fiber_type}_{mod_type}.npz', allow_pickle=True)
 loaded_data = _loaded_data[index_type].tolist()
 
-plt.plot(np.linspace(*bounds, 2 ** 8), loaded_data['index'][2**7])
-plt.xlabel(xlabel)
-plt.ylabel('Показатель преломления')
-plt.tight_layout()
-plt.savefig(f'{fiber_type}/{fiber_type}_{index_type.lower()}_index.png', dpi=200)
-plt.show()
+area_size = loaded_data['params']['area_size']
+bounds = [-area_size / 2, area_size / 2]
+core_radius = loaded_data['params']['core_radius']
+
+# plt.plot(np.linspace(*bounds, 2 ** 8), loaded_data['index'][2**7])
+# plt.xlabel(xlabel)
+# plt.ylabel('Показатель преломления')
+# plt.tight_layout()
+# plt.savefig(f'{fiber_type}/{fiber_type}_{index_type.lower()}_index.png', dpi=200)
+# plt.show()
 
 # np_plot = 128
 X = np.linspace(*bounds, npoints)
@@ -51,7 +55,7 @@ X = np.linspace(*bounds, npoints)
 # plt.savefig(f'{fiber_type}/{fiber_type}_{index_type.lower()}_{mod_type}_output.png', dpi=200)
 # plt.show()
 
-fig, ax = plt.subplots(2, 3, figsize=(9, 6))
+fig, ax = plt.subplots(1, 3, figsize=(9, 3))
 ax = ax.flatten()
 ax[0].imshow(loaded_data['s__ip'], label='исх.', extent=bounds*2)
 ax[0].set_xlabel('(a)')
@@ -63,9 +67,11 @@ lbl = 'cdef'
 for k in loaded_data:
     if k.startswith('o__ip'):
         d = float(k.split('_')[-1])
-        ax[i].imshow(loaded_data[k], label=f'{d} см', extent=bounds*2)
+        ax[i].imshow(loaded_data[k], label=f'вых. {d} см', extent=bounds*2)
         ax[i].set_xlabel(f'({lbl[i - 2]})')
         i += 1
+    if i == 3:
+        break
         
 plt.legend(frameon=0)
 # plt.ylabel('Интенсивность, у.е.')
@@ -75,12 +81,14 @@ plt.savefig(f'{fiber_type}/{fiber_type}_{index_type.lower()}_{mod_type}_ip.png',
 plt.show()
 
 # X = np.linspace(0, area_size / npoints * np_plot, np_plot)
-plt.plot(X, _c(_n(loaded_data['s__cf'][np_half]), X), label='исх.')
-plt.plot(X, _c(_n(loaded_data['i__cf'][np_half]), X), label='вх.')
+plt.plot(X, _c(_n(loaded_data['s__cf'][np_half]), X, r=core_radius), label='исх.')
+plt.plot(X, _c(_n(loaded_data['i__cf'][np_half]), X, r=core_radius), label='вх.')
 for k in loaded_data:
-    if k.startswith('o__cf'):
+    # if k.startswith('o__cf_0'):
+    if k == 'o__cf_0':
         d = float(k.split('_')[-1])
-        plt.plot(X, _c(_n(loaded_data[k][np_half]), X), label=f'{d} см')
+        plt.plot(X, _c(_n(loaded_data[k][np_half]), X, r=core_radius), 
+                 label='вых.' + (f' {d} см' if d > 0 else ''))
 plt.legend(frameon=0)
 plt.ylabel('Коэффициент корреляции')
 plt.xlabel('Поперечная координата, мкм')
