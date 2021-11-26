@@ -129,7 +129,7 @@ class LightFiberAnalyser:
 
         self.fiber_props = \
             f"{self.fiber_type}_{self.index_type}_{self.core_radius * 2:g}_properties.npz"
-        self.__o__fields = {}
+        self.__o__fields = []
 
     def __set_index_profile(self):
         profile = IndexProfile(npoints=self.npoints,
@@ -198,13 +198,13 @@ class LightFiberAnalyser:
                                init_field_gen=self.init_field_gen,
                                init_gen_args=self.init_gen_args,
                                unsafe_fft=1, use_gpu=self.use_gpu)
+            self.mask = self._mf(self.beam.X, self.beam.Y)
+            self.beam.coordinate_filter(f_init=self.mask)
         else:
             self.beam = Beam2D(self.area_size, self.npoints, self.wl,
                                init_field=field,
                                unsafe_fft=1,
                                use_gpu=self.use_gpu)
-        self.mask = self._mf(self.beam.X, self.beam.Y)
-        self.beam.coordinate_filter(f_init=self.mask)
 
     def propagate(self, z=0):
         self.beam.propagate(z)
@@ -231,7 +231,7 @@ class LightFiberAnalyser:
         self.beam.construct_by_modes(self.modes, mc)
         return self.iprofile
 
-    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=False):
+    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=1):
         t = perf_counter()
         if fast:
             log.info(
@@ -286,39 +286,31 @@ class LightFiberAnalyser:
         nimg = self.nimg if nimg == 0 else nimg
         t = perf_counter()
         idata = np.zeros((nimg, self.npoints, self.npoints))
-        self.__o__fields[prop_distance] = []
-        pre_full = 0
-        if len(self.__o__fields) > 0:
-            pre_dist = list(self.__o__fields.keys())[-1]
-            pre_full = (
-                len(self.__o__fields[pre_dist]) == nimg)
-        if pre_full:
-            pre_data = self.__o__fields[pre_dist]
-            print(prop_distance, pre_dist)
+        __fields = []
         for i in range(nimg):
-            if pre_full:
-                _iprofile = self.init_beam(
-                    pre_data[i])
-                log.debug('Read profile')
+            if len(self.__o__fields) == nimg:
+                self.init_beam(
+                    self.__o__fields[i])
+                _iprofile = self.beam.iprofile
             else:
-                if expand > 1:
-                    self.init_beam()
+                self.init_beam()
                 _iprofile = self.get_output_iprofile(
                     fiber_len, self.modes_coeffs[i])
             if prop_distance > 0:
                 if expand > 1:
                     self.beam.expand(self.area_size * expand)
-                    # log.debug(self.beam)
                     self.beam.coarse(expand)
-                self.propagate(
-                    (prop_distance - float(pre_dist)) / um)
-                # log.debug(self.beam)
+                self.propagate(prop_distance / um)
                 idata[i, :, :] = self.beam.iprofile
             else:
                 idata[i, :, :] = _iprofile
-            self.__o__fields[prop_distance].append(self.beam.field)
-        self.__o__fields[pre_dist] = None
+            __fields.append(self.beam.field)
+
+        # if prop_distance == 0:
+        self.__o__fields = __fields
+        # log.info(self.area_size)
         self.area_size = self.area_size * expand
+        # log.info(self.area_size)
         point_data = idata[:, self.npoints // 2, self.npoints // 2]
         log.info(
             f"In-fiber data to cf generated. Elapsed time {perf_counter() - t:.3f} s")
@@ -442,9 +434,10 @@ mod_params = {
 
 # um
 fiber_len = 10 / um  # um for cm
-distances = (
-    np.array([0, 20, 40, 60, 80, 100, 150, 200, 1000, 3000, 10000]) * um)
-expands = ([1] * 6 + [2] + [1] * 1 + [2] + [1] + [2])
+real_distances = [0, 20, 40, 60, 80, 100, 150, 200, 400, 1000, 3000, 10000]
+distances = np.diff(
+    np.array([0] + real_distances) * um)
+expands = [1] * 6 + [2] * 1 + [1] + [2] * 2 + [1]+ [2]
 n_cf = 1000
 date = '241121'
 data_dir = 'mmf'
@@ -491,13 +484,13 @@ for mod in mod_params:
 
         analyser.set_transmission_matrix(fiber_len)
         log.info(f'Set fiber length to {fiber_len * um} cm')
-        for expf, d in zip(expands, distances):
+        for expf, d, rd in zip(expands, distances, real_distances):
             log.info(f"Set propagation distance to {d:g} cm")
             # Корреляционная функция после волокна на расстоянии d см
-            fiber_data[itype][f'o__cf_{d}'] = analyser.correlate_output(
-                n_cf, fiber_len, d, expf)
+            fiber_data[itype][f'o__cf_{rd}'] = analyser.correlate_output(
+                n_cf, fiber_len, prop_distance=d, expand=expf)
             # Пример профиля после волокна на расстоянии d см
-            fiber_data[itype][f'o__ip_{d}'] = analyser.iprofile
+            fiber_data[itype][f'o__ip_{rd}'] = analyser.iprofile
         # fiber_data[itype]['params']['max_flen'] = max_flen
         # fiber_data[itype]['fl__cf'] = analyser.correlate_by_fiber_len(
         #     n_cf, max_fiber_len=max_flen)

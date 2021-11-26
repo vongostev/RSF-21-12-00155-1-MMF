@@ -59,12 +59,12 @@ X = np.linspace(*bounds, npoints)
 
 fig, ax = plt.subplots(3, 5, figsize=(9, 5))
 ax = ax.flatten()
-ax[0].imshow(loaded_data['s__ip'], label='исх.', extent=bounds*2)
-ax[0].set_xlabel('(a)')
-ax[1].imshow(loaded_data['i__ip'], label='вх.', extent=bounds*2)
-ax[1].set_xlabel('(b)')
+# ax[0].imshow(loaded_data['s__ip'], label='исх.', extent=bounds*2)
+# ax[0].set_xlabel('(a)')
+# ax[1].imshow(loaded_data['i__ip'], label='вх.', extent=bounds*2)
+# ax[1].set_xlabel('(b)')
 
-i = 2
+i = 0
 lbl = 'cdefeeeeeeee'
 for k in loaded_data:
     if k.startswith('o__ip'):
@@ -74,7 +74,7 @@ for k in loaded_data:
             ax[i].imshow(p, extent=bounds*2)
         else:
             b = area_size / 2 * (i - 1) * (1 if i < 5 else 2)
-            ax[i].imshow(p, extent=[- b, b]*2)
+            ax[i].imshow(p)#, extent=[- b, b]*2)
         ax[i].set_xlabel(f'({lbl[i - 2]})')
         i += 1
     # if i == 3:
