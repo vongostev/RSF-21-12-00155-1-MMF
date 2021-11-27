@@ -31,38 +31,16 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 
 """
-1. Распространение случайного поля в волокне и за ним при амплитудной модуляции
-    - Картинка маски DMD
-    - Картинка профиля до волокна 
+1. Распространение случайного поля в волокне и за ним при бинарной амплитудной модуляции
+2. Распространение случайного поля в волокне и за ним при амплитудной модуляции
+3. Распространение случайного поля в волокне и за ним при фазовой модуляции
+4. Распространение случайного поля в волокне и за ним при амплитудно-фазовой модуляции
+    - Картинка профиля до волокна
     - Картинка профиля на входе в волокно (собранного из мод)
-    - Картинка модового состава
-    - Картинка поля на выходе из волокна
+    - Картинка поля на выходе из волокна и на разных расстояниях от него
     - Корреляционная функция исходного поля и корреляционная функция поля на
     входе в волокно
-    - Корреляционная функция при фиксированной длине волокна
-    - Зависимость ширины корреляционной функции от длины волокна
-
-2. Распространение случайного поля в волокне и за ним при фазовой модуляции
-    - Картинка маски SLM
-    - Картинка профиля до волокна 
-    - Картинка профиля на входе в волокно (собранного из мод)
-    - Картинка модового состава
-    - Картинка поля на выходе из волокна
-    - Корреляционная функция исходного поля и корреляционная функция поля на
-    входе в волокно
-    - Корреляционная функция при фиксированной длине волокна
-    - Зависимость ширины корреляционной функции от длины волокна
-
-3. Распространение случайного поля в волокне и за ним при амплитудно-фазовой модуляции
-    - Картинка амплитудно-фазовой маски
-    - Картинка профиля до волокна 
-    - Картинка профиля на входе в волокно (собранного из мод)
-    - Картинка модового состава
-    - Картинка поля на выходе из волокна
-    - Корреляционная функция исходного поля и корреляционная функция поля на
-    входе в волокно
-    - Корреляционная функция при фиксированной длине волокна
-    - Зависимость ширины корреляционной функции от длины волокна
+    - Корреляционная функция на выходе волокна и на разных расстояниях от него
 
 """
 
@@ -231,7 +209,7 @@ class LightFiberAnalyser:
         self.beam.construct_by_modes(self.modes, mc)
         return self.iprofile
 
-    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=1):
+    def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=False):
         t = perf_counter()
         if fast:
             log.info(
@@ -288,7 +266,8 @@ class LightFiberAnalyser:
         idata = np.zeros((nimg, self.npoints, self.npoints))
         __fields = []
         for i in range(nimg):
-            if len(self.__o__fields) == nimg:
+            if len(self.__o__fields) == nimg and expand > 1:
+                self.init_beam()
                 self.init_beam(
                     self.__o__fields[i])
                 _iprofile = self.beam.iprofile
@@ -306,11 +285,8 @@ class LightFiberAnalyser:
                 idata[i, :, :] = _iprofile
             __fields.append(self.beam.field)
 
-        # if prop_distance == 0:
         self.__o__fields = __fields
-        # log.info(self.area_size)
         self.area_size = self.area_size * expand
-        # log.info(self.area_size)
         point_data = idata[:, self.npoints // 2, self.npoints // 2]
         log.info(
             f"In-fiber data to cf generated. Elapsed time {perf_counter() - t:.3f} s")
@@ -337,109 +313,108 @@ fiber_params = [
         n1=1.4613,
         mod_radius=31.25
     ),
-    # dict(
-    #     npoints=256,
-    #     area_size=3.5 * 31.25,  # um
-    #     # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
-    #     index_type='SI',
-    #     core_radius=25,
-    #     NA=0.22,
-    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-    #     n1=1.4613,
-    #     mod_radius=25
-    # ),
-    # dict(
-    #     area_size = 4 * 3,  # um
-    #     # to SIMC IXF-MC-12-PAS-6
-    #     index_type='SI',
-    #     fiber_type='smf_simc',
-    #     core_radius=3,
-    #     NA=0.19,
-    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-    #     n1=1.4613,
-    #     mod_radius=3
-    # ),
-    # dict(
-    #     npoints = 128,
-    #     area_size = 12 * 1.5,  # um
-    #     # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
-    #     index_type='SI',
-    #     fiber_type='smf',
-    #     core_radius=1.5,
-    #     NA=0.12,
-    #     # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
-    #     n1=1.4613,
-    #     mod_radius=1.5
-    # ),
-    # dict(
-    #     area_size=3.5 * 31.25,
-    #     npoints=256,
-    #     # https://photonics.ixblue.com/sites/default/files/2021-06/IXF-MC-12-PAS-6_edA_multicore_fiber.pdf
-    #     index_type='SIMC',
-    #     core_radius=3,
-    #     NA=0.19,
-    #     n1=1.4613,
-    #     simc__kwargs=dict(
-    #         core_pitch=35,
-    #         delta=0.039,
-    #         dims=12,
-    #         layers=1,
-    #         central_core_radius=0
-    #     ),
-    #     mod_radius=42
-    # ),
-    # dict(
-    #     # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
-    #     area_size=150,
-    #     npoints=400,
-    #     index_type='PCF',
-    #     core_radius=1.8,
-    #     NA=0.2,
-    #     n1=1.4613,
-    #     pcf__kwargs=dict(
-    #         central_core_radius=5,
-    #         central_core_n1=1,
-    #         core_pitch=0.2,
-    #         pcf_radius=37,
-    #         cladding_radius=60
-    #     ),
-    #     mod_radius=60
-    # )
+    dict(
+        npoints=256,
+        area_size=3.5 * 31.25,  # um
+        # https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=6838
+        index_type='SI',
+        core_radius=25,
+        NA=0.22,
+        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+        n1=1.4613,
+        mod_radius=25
+    ),
+    dict(
+        area_size=4 * 3,  # um
+        # to SIMC IXF-MC-12-PAS-6
+        index_type='SI',
+        fiber_type='smf_simc',
+        core_radius=3,
+        NA=0.19,
+        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+        n1=1.4613,
+        mod_radius=3
+    ),
+    dict(
+        npoints=128,
+        area_size=12 * 1.5,  # um
+        # https://www.thorlabs.com/drawings/b2e64c24c4214c42-DB6047F0-B8E1-ED20-62AA1F597ADBE2AB/S405-XP-SpecSheet.pdf
+        index_type='SI',
+        fiber_type='smf',
+        core_radius=1.5,
+        NA=0.12,
+        # https://www.frontiersin.org/articles/10.3389/fnins.2019.00082/full#B13
+        n1=1.4613,
+        mod_radius=1.5
+    ),
+    dict(
+        area_size=3.5 * 31.25,
+        npoints=256,
+        # https://photonics.ixblue.com/sites/default/files/2021-06/IXF-MC-12-PAS-6_edA_multicore_fiber.pdf
+        index_type='SIMC',
+        core_radius=3,
+        NA=0.19,
+        n1=1.4613,
+        simc__kwargs=dict(
+            core_pitch=35,
+            delta=0.039,
+            dims=12,
+            layers=1,
+            central_core_radius=0
+        ),
+        mod_radius=42
+    ),
+    dict(
+        # https://www.thorlabs.com/thorproduct.cfm?partnumber=S405-XP
+        area_size=150,
+        npoints=400,
+        index_type='PCF',
+        core_radius=1.8,
+        NA=0.2,
+        n1=1.4613,
+        pcf__kwargs=dict(
+            central_core_radius=5,
+            central_core_n1=1,
+            core_pitch=0.2,
+            pcf_radius=37,
+            cladding_radius=60
+        ),
+        mod_radius=60
+    )
 ]
 
 fiber_data = {}
 
 mod_params = {
-    # 'dmd': {
-    #     'init_gen': plane_wave,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole_bin
-    # },
-    # 'ampl': {
-    #     'init_gen': plane_wave,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole
-    # },
+    'dmd': {
+        'init_gen': plane_wave,
+        'init_args': (),
+        'mod_gen': random_round_hole_bin
+    },
+    'ampl': {
+        'init_gen': plane_wave,
+        'init_args': (),
+        'mod_gen': random_round_hole
+    },
     'slm': {
         'init_gen': plane_wave,
         'init_args': (),
         'mod_gen': random_round_hole_phase
     },
-    # 'dmdslm': {
-    #     'init_gen': random_wave_bin,
-    #     'init_args': (),
-    #     'mod_gen': random_round_hole_phase
-    # },
+    'dmdslm': {
+        'init_gen': random_wave_bin,
+        'init_args': (),
+        'mod_gen': random_round_hole_phase
+    },
 }
 
 # um
 fiber_len = 10 / um  # um for cm
 real_distances = [0, 20, 40, 60, 80, 100, 150, 200, 400, 1000, 3000, 10000]
-distances = np.diff(
-    np.array([0] + real_distances) * um)
-expands = [1] * 6 + [2] * 1 + [1] + [2] * 2 + [1]+ [2]
+distances = np.diff(np.array([0] + real_distances)) * um
+expands = [1] * 6 + [2] * 1 + [1] * 2 + [2] * 3
 n_cf = 1000
-date = '241121'
+date = '261121'
 data_dir = 'mmf'
 max_flen = 23 / um
 using_gpu = False
