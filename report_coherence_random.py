@@ -142,7 +142,7 @@ class LightFiberAnalyser:
         try:
             with np.load(self.fiber_props) as data:
                 self.fiber_op = data["fiber_op"]
-                self.modes = cp.array(data["modes_list"])
+                self.modes = self.beam.xp.array(data["modes_list"])
                 self.betas = data["betas"]
             log.info(f'Fiber data loaded from `{self.fiber_props}`')
         except FileNotFoundError:

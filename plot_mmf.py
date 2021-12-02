@@ -19,16 +19,16 @@ def _c(y, X, r=-1):
     return y
 
 
-SAVE = False
+SAVE = 1
 xlabel = 'Поперечная координата, мкм'
 npoints = 2 ** 8
 np_half = 2 ** 7
-index_type = 'GRIN'
-mod_type = 'slm'
+index_type = 'SI'
+mod_type = 'dmd'
 fiber_type = 'mmf'
-data_dir = 'mmf'
+data_dir = '50_62.5'
 _loaded_data = np.load(
-    f'{data_dir}/cohdata_dist_261121_{fiber_type}_{mod_type}.npz', allow_pickle=True)
+    f'{data_dir}/cohdata_191121_{fiber_type}_{mod_type}.npz', allow_pickle=True)
 loaded_data = _loaded_data[index_type].tolist()
 
 area_size = loaded_data['params']['area_size']
@@ -41,11 +41,11 @@ plt.ylabel('Показатель преломления')
 plt.tight_layout()
 if SAVE:
     plt.savefig(
-        f'{fiber_type}/{fiber_type}_{index_type.lower()}_index.png', dpi=200)
+        f'{data_dir}/{fiber_type}_{index_type.lower()}_index.png', dpi=100)
 plt.show()
 
 
-fig, ax = plt.subplots(1, 3, figsize=(9, 5))
+fig, ax = plt.subplots(1, 3, figsize=(9, 3))
 ax = ax.flatten()
 ax[0].imshow(loaded_data['s__ip'], label='исх.', extent=bounds*2)
 ax[0].set_xlabel('(a)')
@@ -57,7 +57,7 @@ plt.legend(frameon=0)
 plt.tight_layout()
 if SAVE:
     plt.savefig(
-        f'{fiber_type}/{fiber_type}_{index_type.lower()}_{mod_type}_ip_full.png', dpi=200)
+        f'{data_dir}/{fiber_type}_{index_type.lower()}_{mod_type}_ip.png', dpi=150)
 plt.show()
 
 X = np.linspace(*bounds, npoints)
@@ -73,5 +73,5 @@ plt.xlabel('Поперечная координата, мкм')
 plt.tight_layout()
 if SAVE:
     plt.savefig(
-        f'{fiber_type}/{fiber_type}_{index_type.lower()}_{mod_type}_output_cf.png', dpi=200)
+        f'{data_dir}/{fiber_type}_{index_type.lower()}_{mod_type}_output_cf.png', dpi=100)
 plt.show()

@@ -13,6 +13,7 @@ from scipy.linalg import expm
 
 npoints = 256
 cradius = 31.25
+mod_radius = cradius / 2
 area_size = cradius * 3.5
 wl = 0.632
 distances = [0, 100 * um, 1000 * um, 1]
@@ -23,8 +24,8 @@ loaded_data = np.load('mmf_GRIN_62.5_properties.npz')
 modes = loaded_data['modes_list']
 OP = loaded_data['fiber_op']
 ibeam = Beam2D(area_size=area_size * um, npoints=npoints, wl=wl * um, unsafe_fft=1,
-               init_field_gen=random_round_hole_phase,
-               init_gen_args=(cradius * um,),
+               init_field_gen=gaussian_beam,
+               init_gen_args=(1, mod_radius * um,),
                use_gpu=0)
 # init_field_gen=round_hole, init_gen_args=(cradius,))
 profiles = [ibeam.iprofile]
@@ -58,7 +59,7 @@ for ax, p in zip(axes, profiles):
     ax.set_xlabel(f'({lbl[i]})')
     i += 1
 plt.tight_layout()
-# plt.savefig('mmf/mmf_grin_gaussian_ip.png', dpi=200)
+plt.savefig('mmf/mmf_grin_gaussian_ip.png', dpi=100)
 plt.show()
 
 loaded_data.close()

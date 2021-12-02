@@ -29,6 +29,6 @@ axes[1].set_title('GRIN')
 axes[1].set_xlabel('(б)')
 plt.tight_layout()
 # plt.savefig('pcf/pcf_modes.png', dpi=200)
-plt.savefig('mmf/mmf_si_grin_max_modes.png', dpi=200)
+plt.savefig('mmf/mmf_si_grin_max_modes.png', dpi=100)
 
 plt.show()

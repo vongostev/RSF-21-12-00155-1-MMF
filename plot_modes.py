@@ -12,14 +12,13 @@ npoints = 256
 bounds = [-12, 12]
 loaded_data = np.load('smf_simc_SI_6_properties.npz')
 # loaded_data = np.load('mmf_PCF_3.6_properties.npz')
-modes = loaded_data['modes_list'][::-1][100:110]
+modes = loaded_data['modes_list']
 
-fig, axes = plt.subplots(2, 5, dpi=200, figsize=(10, 4))
+fig, axes = plt.subplots(2, 5, dpi=100, figsize=(10, 4))
 for mode, ax in zip(modes, axes.flatten()):
-    ax.imshow(np.real(mode).reshape((400, -1)),
+    ax.imshow(np.real(mode).reshape((256, -1)),
               extent=bounds * 2)
 plt.tight_layout()
-plt.savefig('pcf/pcf_modes.png', dpi=200)
-# plt.savefig('simc/smf_simc_modes.png', dpi=200)
-
+# plt.savefig('pcf/pcf_modes.png', dpi=100)
+plt.savefig('simc/smf_simc_modes.png', dpi=100)
 plt.show()
