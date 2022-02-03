@@ -35,7 +35,7 @@ si_NA = 0.22
 si_labels = ['FG050', 'FG105', 'FG200']
 si_M = V(wl, si_a, si_NA) ** 2 / 2 / 2
 
-fig = plt.figure(figsize=(5, 4))
+plt.figure(figsize=(5, 4))
 labeled_scatter(grin_a * 2, grin_M, grin_labels, 'GRIN')
 labeled_scatter(si_a * 2, si_M, si_labels, 'Step-Index')
 plt.xlabel('Диаметр сердцевины волокна, мкм.')
@@ -48,7 +48,7 @@ plt.tight_layout()
 plt.savefig('mmf/mmf_modesnum.png', dpi=200)
 plt.show()
 
-fig = plt.figure(figsize=(5, 4))
+plt.figure(figsize=(5, 4))
 labeled_scatter(grin_a * 2, rcorr(grin_a, grin_M), grin_labels, 'GRIN', 1)
 labeled_scatter(si_a * 2, rcorr(si_a, si_M), si_labels, 'Step-Index', 0.9)
 plt.xlabel('Диаметр сердцевины волокна, мкм.')

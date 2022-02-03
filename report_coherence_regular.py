@@ -6,10 +6,11 @@ Created on Sat Nov 20 21:48:17 2021
 """
 import __init__
 import numpy as np
+import cupy as cp
 import matplotlib.pyplot as plt
-from lightprop2d import Beam2D, um, plane_wave, round_hole, gaussian_beam, random_round_hole_phase
-from scipy.linalg import expm
-
+from lightprop2d import Beam2D, um, gaussian_beam
+from scipy.sparse.linalg import expm
+from scipy.sparse import csc_matrix
 
 npoints = 256
 cradius = 31.25
@@ -22,11 +23,12 @@ bounds = [- area_size / 2, area_size / 2]
 # loaded_data = np.load('mmf_SI_50_properties.npz')
 loaded_data = np.load('mmf_GRIN_62.5_properties.npz')
 modes = loaded_data['modes_list']
-OP = loaded_data['fiber_op']
-ibeam = Beam2D(area_size=area_size * um, npoints=npoints, wl=wl * um, unsafe_fft=1,
-               init_field_gen=gaussian_beam,
-               init_gen_args=(1, mod_radius * um,),
-               use_gpu=0)
+OP = csc_matrix(loaded_data['fiber_op'])
+ibeam = Beam2D(
+    area_size=area_size * um, npoints=npoints, wl=wl * um,
+    init_field_gen=gaussian_beam,
+    init_gen_args=(1, mod_radius * um,),
+    use_gpu=True)
 # init_field_gen=round_hole, init_gen_args=(cradius,))
 profiles = [ibeam.iprofile]
 
@@ -36,7 +38,7 @@ ibeam.construct_by_modes(modes, mc)
 
 profiles.append(ibeam.iprofile)
 
-mc = expm(1j * OP * 10.) @ mc
+mc = cp.array(expm(1j * OP * 10.).todense()) @ mc
 
 for d in distances:
     ibeam.construct_by_modes(modes, mc)

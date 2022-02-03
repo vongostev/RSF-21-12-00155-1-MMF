@@ -5,7 +5,6 @@ Created on Mon Nov 22 10:37:02 2021
 @author: vonGostev
 """
 import __init__
-from lightprop2d import Beam2D
 import numpy as np
 import matplotlib.pyplot as plt
 
