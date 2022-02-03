@@ -5,7 +5,7 @@ Created on Sat Nov 13 11:33:40 2021
 @author: von.gostev
 """
 import __init__
-
+from tqdm import tqdm
 from logging import Logger, StreamHandler, Formatter
 from joblib import Parallel, delayed
 from pyMMF import (IndexProfile, propagationModeSolver,
@@ -13,8 +13,10 @@ from pyMMF import (IndexProfile, propagationModeSolver,
 from lightprop2d import (
     Beam2D, random_round_hole_phase, random_round_hole, um,
     plane_wave, random_wave_bin, random_round_hole_bin)
+from gi.experiment import corr1d3d
 from dataclasses import dataclass, field
-from scipy.linalg import expm
+from scipy.sparse.linalg import expm
+from scipy.sparse import csc_matrix
 import sys
 from time import perf_counter
 import numpy as np
@@ -141,7 +143,7 @@ class LightFiberAnalyser:
         t = perf_counter()
         try:
             with np.load(self.fiber_props) as data:
-                self.fiber_op = data["fiber_op"]
+                self.fiber_op = csc_matrix(data["fiber_op"])
                 self.modes = self.beam.xp.array(data["modes_list"])
                 self.betas = data["betas"]
             log.info(f'Fiber data loaded from `{self.fiber_props}`')
@@ -153,21 +155,21 @@ class LightFiberAnalyser:
                     nmodesMax=self.Nmodes_estim+100, boundary='close',
                     mode='eig', curvature=None, propag_only=True)
             self.modes = cp.array(modes.profiles)[
-                np.argsort(modes.betas)[::-1]]
-            self.betas = np.array(np.sort(modes.betas))[::-1]
-            self.fiber_op = modes.getEvolutionOperator()
+                cp.argsort(modes.betas)[::-1]]
+            self.betas = cp.array(cp.sort(modes.betas))[::-1]
+            self.fiber_op = csc_matrix(modes.getEvolutionOperator())
             np.savez_compressed(self.fiber_props,
                                 fiber_op=self.fiber_op,
                                 modes_list=self.modes,
                                 betas=self.betas)
             log.info(f'Fiber data saved to `{self.fiber_props}`')
 
-        modes_matrix = cp.array(np.real(np.vstack(self.modes).T))
+        modes_matrix = cp.array(cp.real(cp.vstack(self.modes).T))
         self.modes_matrix_t = cp.array(modes_matrix.T)
         self.modes_matrix_dot_t = modes_matrix.T.dot(modes_matrix)
         log.info(f'Found {len(self.modes)} modes')
         log.info(f"Fiber initialized. Elapsed time {perf_counter() - t:.3f} s")
-        self.modes_coeffs = np.zeros((self.nimg, len(self.modes)),
+        self.modes_coeffs = cp.zeros((self.nimg, len(self.modes)),
                                      dtype=np.complex128)
 
     def init_beam(self, field=None):
@@ -175,14 +177,15 @@ class LightFiberAnalyser:
             self.beam = Beam2D(self.area_size, self.npoints, self.wl,
                                init_field_gen=self.init_field_gen,
                                init_gen_args=self.init_gen_args,
-                               unsafe_fft=1, use_gpu=self.use_gpu)
+                               use_gpu=self.use_gpu,
+                               numpy_output=False)
             self.mask = self._mf(self.beam.X, self.beam.Y)
             self.beam.coordinate_filter(f_init=self.mask)
         else:
             self.beam = Beam2D(self.area_size, self.npoints, self.wl,
                                init_field=field,
-                               unsafe_fft=1,
-                               use_gpu=self.use_gpu)
+                               use_gpu=self.use_gpu,
+                               numpy_output=False)
 
     def propagate(self, z=0):
         self.beam.propagate(z)
@@ -191,7 +194,9 @@ class LightFiberAnalyser:
         return self.solver.indexProfile.n.reshape([self.npoints] * 2)
 
     def set_transmission_matrix(self, fiber_len):
-        self.tm = cp.array(expm(1j * self.fiber_op * fiber_len))
+        t = perf_counter()
+        self.tm = cp.array(expm(1j * self.fiber_op * fiber_len).todense())
+        log.info(f'Transmission matrix calculated. Elapsed time {perf_counter() - t} s')
 
     @property
     def iprofile(self):
@@ -211,30 +216,13 @@ class LightFiberAnalyser:
 
     def _get_cf(self, obj_data, ref_data, parallel_njobs=-1, fast=False):
         t = perf_counter()
-        if fast:
-            log.info(
-                'Compute correlation function fast using `np.tensordot`')
-            self.cf = np.tensordot(obj_data - obj_data.mean(),
-                                   ref_data - ref_data.mean(axis=0),
-                                   axes=1) / np.sqrt(obj_data.std() ** 2 * ref_data.std() ** 2)
-        else:
-            log.info(
-                'Compute correlation function slow but exact using `np.corrcoef`')
-
-            def gi(pixel_data):
-                return np.nan_to_num(np.corrcoef(obj_data, pixel_data))[0, 1]
-
-            img_shape = ref_data.shape[1:]
-            ref_data = ref_data.reshape(ref_data.shape[0], -1).T
-            corr_data = Parallel(n_jobs=parallel_njobs)(
-                delayed(gi)(s) for s in ref_data)
-            self.cf = np.asarray(corr_data).reshape(img_shape)
+        self.cf = corr1d3d(obj_data, ref_data)
         log.info(
             f"Correlation function calculated. Elapsed time {perf_counter() - t:.3f} s")
 
     def correlate_init(self, nimg=0):
         t = perf_counter()
-        idata = np.zeros((nimg, self.npoints, self.npoints))
+        idata = cp.zeros((nimg, self.npoints, self.npoints))
         for i in range(nimg):
             self.init_beam()
             idata[i, :, :] = self.iprofile
@@ -248,12 +236,12 @@ class LightFiberAnalyser:
     def correlate_input(self, nimg=0):
         nimg = self.nimg if nimg == 0 else nimg
         t = perf_counter()
-        idata = np.zeros((nimg, self.npoints, self.npoints))
-        for i in range(nimg):
+        idata = cp.zeros((nimg, self.npoints, self.npoints))
+        for i in tqdm(range(nimg), position=0, leave=True):
             self.init_beam()
             _iprofile = self.get_output_iprofile(0)
             idata[i, :, :] = _iprofile
-            self.modes_coeffs[i, :] = self.beam._np(self.beam.modes_coeffs)
+            self.modes_coeffs[i, :] = self.beam.modes_coeffs
         point_data = idata[:, self.npoints // 2, self.npoints // 2]
         log.info(
             f"In-fiber data to cf generated. Elapsed time {perf_counter() - t:.3f} s")
@@ -263,9 +251,9 @@ class LightFiberAnalyser:
     def correlate_output(self, nimg=0, fiber_len=0, prop_distance=0, expand=1):
         nimg = self.nimg if nimg == 0 else nimg
         t = perf_counter()
-        idata = np.zeros((nimg, self.npoints, self.npoints))
+        idata = cp.zeros((nimg, self.npoints, self.npoints))
         __fields = []
-        for i in range(nimg):
+        for i in tqdm(range(nimg), position=0, leave=True):
             if len(self.__o__fields) == nimg and expand > 1:
                 self.init_beam()
                 self.init_beam(
@@ -417,7 +405,7 @@ n_cf = 1000
 date = '261121'
 data_dir = 'mmf'
 max_flen = 23 / um
-using_gpu = False
+using_gpu = True
 PREFIX = 'cohdata_dist'
 
 if not using_gpu:
